@@ -1,0 +1,10 @@
+.git
+.env
+secrets
+data
+certs
+*.db
+*.db-wal
+*.db-shm
+pwpush
+dist

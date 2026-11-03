@@ -1,0 +1,8 @@
+/pwpush
+/data
+/secrets
+/certs
+.env
+*.db
+*.db-wal
+*.db-shm

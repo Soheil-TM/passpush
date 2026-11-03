@@ -1,0 +1,54 @@
+# One service. PUBLISH_ADDR defaults to 127.0.0.1.
+# Set PUBLISH_ADDR=0.0.0.0 to reach the host by its IP. That exposes the
+# listener on every interface, so the firewall must still limit who can connect.
+services:
+  app:
+    build:
+      context: .
+    image: pwpush:local
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    user: "65532:65532"
+    environment:
+      LISTEN_ADDR: ":8443"
+      DATA_DIR: /data
+      ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN}
+      ALSO_ORIGINS: ${ALSO_ORIGINS:-}
+      TLS_MODE: ${TLS_MODE:-direct}
+      TLS_CERT_FILE: /certs/tls.crt
+      TLS_KEY_FILE: /certs/tls.key
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
+      TMPDIR: /tmp
+    volumes:
+      - data:/data
+      - type: bind
+        source: ${TLS_CERT_FILE:?set TLS_CERT_FILE}
+        target: /certs/tls.crt
+        read_only: true
+      - type: bind
+        source: ${TLS_KEY_FILE:?set TLS_KEY_FILE}
+        target: /certs/tls.key
+        read_only: true
+    secrets:
+      - admin_password
+    ports:
+      - "${PUBLISH_ADDR:-127.0.0.1}:${HOST_PORT:-8443}:8443"
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "/pwpush", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  data:
+
+secrets:
+  admin_password:
+    file: ./secrets/admin_password.txt

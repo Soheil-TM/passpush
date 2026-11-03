@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>stm</title>
+<style>
+:root{color-scheme:light;--bg:#f3f5f2;--card:#ffffff;--text:#1c2420;--muted:#5c6b62;--line:#e3e8e4;--green:#1f7a45;--green-ink:#ffffff;--focus:#1f7a45;--shadow:0 8px 24px rgba(20,40,30,.08)}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#121614;--card:#1c2420;--text:#e8eee9;--muted:#a8b5ad;--line:#2c3832;--green:#6fbf2a;--green-ink:#123018;--focus:#6fbf2a;--shadow:0 8px 24px rgba(0,0,0,.35)}}
+body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:16px;line-height:1.45}
+header{border-bottom:1px solid var(--line)}
+.bar{max-width:40rem;margin:0 auto;display:flex;align-items:baseline;gap:12px;padding:16px 24px}
+.brand{color:var(--green);font-weight:700;font-size:1.5rem}
+.tag{margin:0;color:var(--muted)}
+main{flex:1;display:flex;align-items:center;justify-content:center;padding:32px 16px}
+.card{width:100%;max-width:40rem;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:32px}
+h1{font-size:1.75rem;line-height:1.25;margin:0 0 16px}
+#msg{margin:0 0 16px}
+button{font:inherit;cursor:pointer}
+button:focus{outline:2px solid var(--focus);outline-offset:2px}
+#reveal{border:0;border-radius:8px;padding:12px 16px;background:var(--green);color:var(--green-ink)}
+#copy{border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:transparent;color:var(--text);margin-top:12px}
+#out{white-space:pre-wrap;word-break:break-word;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:12px;margin:16px 0 0}
+@media (max-width:640px){.card{padding:24px 16px}}
+</style>
+</head>
+<body>
+<header><div class="bar"><div class="brand">stm</div><p class="tag">One-time secret links</p></div></header>
+<main>
+<section class="card">
+<h1>Secret</h1>
+<p id="msg">Open the original link. Refreshing this page does not use up the secret.</p>
+<button type="button" id="reveal" hidden>Reveal</button>
+<pre id="out"></pre>
+<button type="button" id="copy" hidden>Copy</button>
+</section>
+</main>
+<script>
+"use strict";
+(function () {
+  function b64urlToBytes(s) {
+    const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
+    const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + pad;
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function bytesToB64url(bytes) {
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+  async function hkdf(master, info) {
+    const key = await crypto.subtle.importKey("raw", master, "HKDF", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits({
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(32),
+      info: new TextEncoder().encode(info)
+    }, key, 256);
+    return new Uint8Array(bits);
+  }
+  const msg = document.getElementById("msg");
+  const button = document.getElementById("reveal");
+  const out = document.getElementById("out");
+  const copyBtn = document.getElementById("copy");
+  let copyTimer = 0;
+  const path = location.pathname;
+  const id = path.indexOf("/p/") === 0 ? path.slice(3) : "";
+  let master = null;
+  const fragment = location.hash.charAt(0) === "#" ? location.hash.slice(1) : "";
+  if (fragment.length > 0) {
+    try { master = b64urlToBytes(fragment); } catch (e) { master = null; }
+    history.replaceState(null, "", path);
+  }
+  if (!master || master.length !== 32 || id.length === 0) {
+    msg.textContent = "The key is not on this page. Open the original link again. This does not use up the secret.";
+    return;
+  }
+  button.hidden = false;
+  msg.textContent = "The key stays only in this page. Reveal uses one open.";
+  button.addEventListener("click", async function () {
+    button.disabled = true;
+    let encKey;
+    let authToken;
+    try {
+      encKey = await hkdf(master, "pwpush-v1-enc");
+      authToken = await hkdf(master, "pwpush-v1-auth");
+    } catch (e) {
+      msg.textContent = "The key is not on this page. Open the original link again. This does not use up the secret.";
+      return;
+    }
+    let res;
+    try {
+      res = await fetch("/api/reveal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ id: id, authToken: bytesToB64url(authToken) })
+      });
+    } catch (e) {
+      msg.textContent = "The request failed before the secret was read.";
+      button.disabled = false;
+      return;
+    }
+    if (res.status !== 200) {
+      msg.textContent = "This link is not available.";
+      return;
+    }
+    let body;
+    try { body = await res.json(); } catch (e) {
+      msg.textContent = "The secret was retrieved and cannot be opened again.";
+      return;
+    }
+    try {
+      const key = await crypto.subtle.importKey("raw", encKey, "AES-GCM", false, ["decrypt"]);
+      const plain = await crypto.subtle.decrypt({
+        name: "AES-GCM",
+        iv: b64urlToBytes(body.nonce),
+        additionalData: new TextEncoder().encode("v1|" + id)
+      }, key, b64urlToBytes(body.ciphertext));
+      out.textContent = new TextDecoder().decode(plain);
+      copyBtn.hidden = false;
+      copyBtn.textContent = "Copy";
+      if (body.remaining > 0) {
+        msg.textContent = "Revealed. " + body.remaining + " opens left.";
+        button.disabled = false;
+      } else {
+        msg.textContent = "Revealed. That was the last open.";
+      }
+    } catch (e) {
+      msg.textContent = "The secret was retrieved and cannot be opened again.";
+    }
+  });
+  copyBtn.addEventListener("click", async function () {
+    try {
+      await navigator.clipboard.writeText(out.textContent);
+      copyBtn.textContent = "Copied";
+      clearTimeout(copyTimer);
+      copyTimer = setTimeout(function () { copyBtn.textContent = "Copy"; }, 2000);
+    } catch (e) {
+      copyBtn.textContent = "Select the text";
+      clearTimeout(copyTimer);
+      copyTimer = setTimeout(function () { copyBtn.textContent = "Copy"; }, 2000);
+    }
+  });
+})();
+</script>
+</body>
+</html>

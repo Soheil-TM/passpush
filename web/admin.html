@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>stm</title>
+<style>
+:root{color-scheme:light;--bg:#f3f5f2;--card:#ffffff;--text:#1c2420;--muted:#5c6b62;--line:#e3e8e4;--green:#1f7a45;--green-ink:#ffffff;--focus:#1f7a45;--bad:#9b2c2c;--shadow:0 8px 24px rgba(20,40,30,.08)}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#121614;--card:#1c2420;--text:#e8eee9;--muted:#a8b5ad;--line:#2c3832;--green:#6fbf2a;--green-ink:#123018;--focus:#6fbf2a;--bad:#ffb4b4;--shadow:0 8px 24px rgba(0,0,0,.35)}}
+body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:16px;line-height:1.45}
+header{border-bottom:1px solid var(--line)}
+.bar{max-width:40rem;margin:0 auto;display:flex;align-items:baseline;gap:12px;padding:16px 24px}
+.brand{color:var(--green);font-weight:700;font-size:1.5rem}
+.tag{margin:0;color:var(--muted)}
+main{flex:1;display:flex;align-items:center;justify-content:center;padding:32px 16px}
+.card{width:100%;max-width:40rem;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:32px}
+h1{font-size:1.75rem;line-height:1.25;margin:0 0 16px}
+.lock{display:flex;gap:8px;align-items:flex-start;color:var(--muted);margin:0 0 16px}
+.lock svg{flex:none;margin-top:2px;color:var(--green)}
+label{display:block;margin:16px 0 8px;font-size:.75rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+textarea,input,select{font:inherit;text-transform:none;letter-spacing:0;width:100%;box-sizing:border-box;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px}
+textarea{resize:vertical;min-height:6rem}
+textarea.masked{-webkit-text-security:disc}
+textarea:focus,input:focus,select:focus,button:focus{outline:2px solid var(--focus);outline-offset:2px}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+.tools button,.pick,#copy,#again,#generate{font:inherit;border:1px solid var(--line);background:transparent;color:var(--text);border-radius:8px;padding:8px 12px;cursor:pointer}
+.generator{margin-top:8px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.checks{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:8px}
+.checks label{display:flex;align-items:center;gap:8px;margin:0;text-transform:none;letter-spacing:0;font-size:1rem;color:var(--text)}
+.checks input{width:1rem;height:1rem;padding:0}
+#count{margin-left:auto;color:var(--muted);font-size:.875rem}
+#count.bad{color:var(--bad)}
+.picks{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.pick.selected{border-color:var(--green);color:var(--green)}
+.row{display:flex;gap:16px}
+.row label{flex:1}
+#summary{margin:16px 0 0}
+.note{color:var(--muted);margin:8px 0 0}
+#err{min-height:1.25rem;margin:8px 0 0;color:var(--bad)}
+#create-btn{font:inherit;border:0;border-radius:8px;padding:12px 16px;margin-top:16px;background:var(--green);color:var(--green-ink);cursor:pointer}
+#create-btn:disabled{opacity:.7;cursor:progress}
+.result{margin-top:24px;padding-top:16px;border-top:1px solid var(--line)}
+#link{font-family:ui-monospace,monospace;font-size:.875rem;white-space:pre-wrap;word-break:break-all;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;margin:0}
+.result .actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+#result-msg{margin:8px 0 0}
+.warn{margin:8px 0 0;color:var(--bad)}
+@media (max-width:640px){.row{flex-direction:column;gap:0}.card{padding:24px 16px}#count{margin-left:0}}
+</style>
+</head>
+<body data-origin="__PUBLIC_ORIGIN__" data-max="__MAX_CIPHERTEXT__">
+<header><div class="bar"><div class="brand">stm</div><p class="tag">One-time secret links</p></div></header>
+<main>
+<section class="card">
+<h1>Put in a password or text and send the link</h1>
+<p class="lock"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h1zm2 0h6V7a3 3 0 0 0-6 0v3z"/></svg>Encrypted in your browser. The server never sees the text.</p>
+<label for="plain">Password or text</label>
+<textarea id="plain" rows="4"></textarea>
+<div class="tools">
+<button type="button" id="toggle" aria-pressed="false">Hide</button>
+<span id="count">0 characters</span>
+</div>
+<div class="generator">
+<div class="picks" role="group" aria-label="Generator">
+<button type="button" class="pick selected" id="gen-password" aria-pressed="true">Password</button>
+<button type="button" class="pick" id="gen-passphrase" aria-pressed="false">Passphrase</button>
+</div>
+<label for="gen-length" id="gen-length-label">Characters
+<input id="gen-length" type="number" value="20" min="8" max="128">
+</label>
+<div id="gen-sets" class="checks">
+<label><input id="gen-upper" type="checkbox" checked>Uppercase</label>
+<label><input id="gen-lower" type="checkbox" checked>Lowercase</label>
+<label><input id="gen-digit" type="checkbox" checked>Numbers</label>
+<label><input id="gen-symbol" type="checkbox" checked>Symbols</label>
+</div>
+<button type="button" id="generate">Generate</button>
+</div>
+<div class="picks" role="group" aria-label="Expiry">
+<button type="button" class="pick selected" data-ttl="hour" aria-pressed="true">1 hour</button>
+<button type="button" class="pick" data-ttl="day" aria-pressed="false">1 day</button>
+<button type="button" class="pick" data-ttl="week" aria-pressed="false">7 days</button>
+<button type="button" class="pick" data-ttl="custom" aria-pressed="false">Custom</button>
+</div>
+<div id="custom" class="row" hidden>
+<label for="amount">Lifetime
+<input id="amount" type="number" value="1" min="1">
+</label>
+<label for="unit">Unit
+<select id="unit">
+<option value="minutes">Minutes</option>
+<option value="hours" selected>Hours</option>
+<option value="days">Days</option>
+</select>
+</label>
+</div>
+<label for="views">How many times it can be opened
+<input id="views" type="number" value="1" min="1" max="20">
+</label>
+<p id="summary">Can be opened once, expires in 1 hour.</p>
+<p class="note">Maximum 7 days and 20 opens. The key stays inside the link, and this page cannot show it again.</p>
+<p id="err" aria-live="polite"></p>
+<button type="button" id="create-btn">Create link</button>
+<div id="result" class="result" hidden>
+<pre id="link"></pre>
+<div class="actions">
+<button type="button" id="copy">Copy link</button>
+<button type="button" id="again">Create another</button>
+</div>
+<p id="result-msg" aria-live="polite"></p>
+<p class="warn">This link is shown only once. Anyone who has it can read the secret.</p>
+</div>
+</section>
+</main>
+<script>
+"use strict";
+(function () {
+  const origin = location.origin || document.body.getAttribute("data-origin");
+  const maxCipher = Number(document.body.getAttribute("data-max")) || 65536;
+  const err = document.getElementById("err");
+  const result = document.getElementById("result");
+  const resultMsg = document.getElementById("result-msg");
+  const linkEl = document.getElementById("link");
+  const copyBtn = document.getElementById("copy");
+  const plain = document.getElementById("plain");
+  const amount = document.getElementById("amount");
+  const unit = document.getElementById("unit");
+  const views = document.getElementById("views");
+  const summary = document.getElementById("summary");
+  const count = document.getElementById("count");
+  const custom = document.getElementById("custom");
+  const createBtn = document.getElementById("create-btn");
+  const toggle = document.getElementById("toggle");
+  let link = "";
+  let mode = "hour";
+  let copyTimer = 0;
+  function bytesToB64url(bytes) {
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+  async function hkdf(master, info) {
+    const key = await crypto.subtle.importKey("raw", master, "HKDF", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits({
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(32),
+      info: new TextEncoder().encode(info)
+    }, key, 256);
+    return new Uint8Array(bits);
+  }
+  async function post(url, body) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(body)
+    });
+    const text = await res.text();
+    let parsed = null;
+    try { parsed = JSON.parse(text); } catch (e) { parsed = null; }
+    return { status: res.status, body: parsed };
+  }
+  function plainBytes() { return new TextEncoder().encode(plain.value).length; }
+  function updateCount() {
+    const chars = plain.value.length;
+    count.textContent = chars + (chars === 1 ? " character" : " characters");
+    const over = plainBytes() + 16 > maxCipher;
+    count.classList.toggle("bad", over);
+    if (over) err.textContent = "The text is too long to encrypt.";
+    else if (err.textContent === "The text is too long to encrypt.") err.textContent = "";
+  }
+  function expiryLabel() {
+    if (mode === "hour") return "1 hour";
+    if (mode === "day") return "1 day";
+    if (mode === "week") return "7 days";
+    const n = Number(amount.value);
+    if (!Number.isInteger(n) || n < 1) return "the chosen lifetime";
+    if (unit.value === "days") return n + (n === 1 ? " day" : " days");
+    if (unit.value === "hours") return n + (n === 1 ? " hour" : " hours");
+    return n + (n === 1 ? " minute" : " minutes");
+  }
+  function opensLabel() {
+    const n = Number(views.value);
+    if (n === 1) return "once";
+    if (!Number.isInteger(n) || n < 1) return "the chosen number of times";
+    return n + " times";
+  }
+  function updateSummary() {
+    summary.textContent = "Can be opened " + opensLabel() + ", expires in " + expiryLabel() + ".";
+  }
+  function ttlSeconds() {
+    if (mode === "hour") return 3600;
+    if (mode === "day") return 86400;
+    if (mode === "week") return 604800;
+    const n = Number(amount.value);
+    if (unit.value === "days") return n * 86400;
+    if (unit.value === "hours") return n * 3600;
+    return n * 60;
+  }
+  const words = "able,about,above,absorb,accent,accept,access,acid,acorn,across,action,active,actor,adapt,added,adjust,admire,adult,advice,aerial,affair,affect,afford,afraid,after,again,aged,agency,agent,agree,ahead,aiming,airport,alarm,album,alert,alien,alike,alive,alley,allow,almost,alone,along,aloud,alpha,alpine,also,always,amber,amend,among,amount,anchor,ancient,angel,anger,angle,animal,ankle,answer,anthem,antique,apart,apple,apply,apron,arcade,arch,arctic,area,arena,argue,arise,armor,army,aroma,around,arrange,array,arrow,artist,ascend,ashore,aside,aspect,asset,assist,assume,atlas,atom,attach,attack,attend,attic,auction,audio,august,aunt,author,autumn,avenue,avoid,await,awake,award,aware,away,awful,axis,azure,bacon,badge,bagel,baked,baker,balance,ballad,ballet,balloon,ballot,bamboo,banana,bandit,banjo,banker,banner,banquet,barber,barely,bargain,barley,barrel,barrier,basement,basket,battle,beacon,beagle,beaker,beanie,bear,beard,beast,beauty,beaver,became,become,beetle,before,began,begin,behalf,behave,behind,being,belief,believe,bell,belong,below,bench,berry,beside,best,better,between,beyond,bicycle,bigger,bike,binder,birch,bird,birth,biscuit,bison,bitter,black,blade,blame,blank,blast,blaze,blend,bless,blimp,blind,blink,bliss,block,blond,blood,bloom,blossom,blouse,blown,blue,bluff,blunt,board,boast,boat,body,boil,bold,bolt,bomb,bond,bone,bonus,book,boost,boot,booth,border,boring,born,borrow,boss,both,bottle,bottom,bounce,bound,bowel,bowl,boxer,brain,brake,branch,brand,brass,brave,bread,break,breath,breeze,brick,bridge,brief,bright,bring,brisk,broad,bronze,brook,broom,brother,brown,brush,bubble,bucket,budget,build,built,bulb,bulge,bulk,bullet,bundle,bunny,burden,burger,burn,burst,bushel,bustle,busy,butler,butter,button,buyer,cabin,cable,cactus,cage,cake,calm,camel,camera,camp,campus,canal,canary,candle,candy,cannon,canoe,canon,canvas,canyon,cape,capital,captain,carbon,card,care,cargo,carol,carpet,carrot,carry,cart,carve,case,cash,casino,castle,casual,catch,cattle,cause,cave,cedar,ceiling,celery,cellar,cement,center,cereal,chain,chair,chalk,chance,change,channel,chaos,chapter,charge,charm,chart,chase,cheap,check,cheese,cherry,chest,chief,child,chili,chime,chimney,chip,choice,choir,choose,chorus,chrome,chunk,church,cider,cinema,circle,circus,citadel,citrus,city,civic,civil,claim,clamp,clap,clash,class,classic,clay,clean,clear,clerk,clever,click,client,cliff,climb,clinic,clip,cloak,clock,close,closet,cloth,cloud,clover,club,clue,coach,coal,coast,coat,cobble,cocoa,coconut,code,coffee,coil,coin,cold,collar,collect,college,color,column,combat,combine,comedy,comet,comfort,comic,coming,command,comment,commit,common,compass,compete,complain,complete,complex,compose,compute,concert,condor,conduct,confirm,connect,consent,consider,consist,console,contact,contain,content,contest,context,control,convert,cook,cookie,cool,cope,copper,copy,coral,cord,core,cork,corner,correct,cost,cotton,couch,could,count,county,couple,coupon,course,cousin,cover,cozy,craft,crane,crash,crate,crater,crawl,crazy,cream,create,credit,creek,creep,crest,crew,cricket,crisp,critic,crop,cross,crowd,crown,cruise,crumb,crunch,crush,crust,crystal,cube,cuddle,culture,cunning,cupboard,curious,current,curry,curtain,curve,custom,cycle,daily,dairy,daisy,dance,danger,daring,daringly,dark,data,date,dawn,days,dazzle,deal,dean,debate,debt,decade,decent,decide,deck,declare,decor,deep,deer,defend,define,degree,delay,delete,delight,deliver,demand,denial,denim,dense,depart,depend,deploy,depth,derby,desert,design,desire,desk,detail,detect,device,devil,devote,diagram,dial,diamond,diary,diesel,differ,digest,digit,dignity,dilemma,dinner,direct,dirt,discover,discuss,dish,dismay,display,distance,divert,divide,divine,dizzy,doctor,dodge,domain,donate,donkey,donor,door,dose,double,doubt,dough,down,draft,dragon,drain,drama,draw,dream,dress,drift,drill,drink,drive,driver,drop,drove,drum,dry,dual,duck,dude,duke,dune,during,dust,duty,dwell,eager,eagle,early,earn,earth,ease,easel,east,easy,eaten,echo,edge,edit,educate,effect,effort,eight,either,elbow,elder,elect,elegant,element,eleven,elite,elm,else,embark,emblem,embrace,emerge,empire,employ,empty,enable,enact,enchant,encode,encore,endless,endure,energy,engage,engine,enjoy,enlist,enough,enrich,enter,entire,entry,envelope,envy,epic,equal,equip,erase,error,escape,essay,estate,esteem,ethics,even,event,ever,every,exact,example,exceed,except,exchange,excite,excuse,exile,exist,exit,expand,expect,expert,expire,explain,explore,export,expose,extend,extra,fabric,facade,face,facet,fact,factor,faded,faint,fair,fairy,faith,falcon,fall,false,fame,family,famous,fancy,fantasy,farce,farm,farmer,fashion,fast,fasten,fate,father,faucet,fault,favor,feast,feather,feature,federal,feed,feel,feet,fellow,felt,female,fence,ferry,festival,fever,fiber,fiction,field,fierce,fifth,fifty,fight,figure,file,fill,film,filter,final,find,fine,finger,finish,fire,firm,first,fish,fit,five,fix,flag,flame,flank,flash,flask,flat,flavor,flee,fleet,flesh,flick,flight,fling,flint,float,flock,flood,floor,flora,flour,flow,flower,fluent,fluffy,fluid,flute,focus,foggy,fold,folder,folk,follow,fond,font,food,fool,foot,force,forest,forge,forget,fork,form,formal,format,former,fort,forth,fortune,forum,fossil,foster,found,fountain,four,fox,frame,frank,free,freeze,fresh,friend,fringe,frog,front,frost,frown,frozen,fruit,fuel,full,fumble,fun,fund,funny,fur,furnace,furnish,future,gadget,gain,galaxy,gallery,game,garage,garden,garlic,garment,gasp,gate,gather,gauge,gave,gaze,gear,gecko,general,genius,gentle,gently,germ,ghost,giant,gift,giggle,ginger,giraffe,girl,give,given,glad,glance,glass,gleam,glide,glimpse,globe,gloom,glory,gloss,glove,glow,goal,goat,going,gold,golden,golf,gone,good,goose,gorge,gossip,govern,gown,grab,grace,grade,grain,grand,grant,grape,graph,grasp,grass,gravel,gravy,gray,great,green,greet,grew,grid,grief,grill,grin,grip,grit,grocery,groove,ground,group,grove,grow,grown,growth,guard,guess,guest,guide,guild,guilt,guitar,gulf,gully,habit,habitat,hair,half,hall,hammer,hand,handle,handy,hang,happen,happy,harbor,hard,hardly,harm,harmony,harsh,harvest,haste,hatch,haven,hawk,hazard,head,health,hear,heart,hearth,heat,heaven,heavy,hedge,height,held,helium,hello,helmet,help,hence,herbal,herd,here,hero,hidden,high,higher,highway,hike,hill,hinge,hint,hippo,hire,history,hobby,hold,holder,hole,holiday,hollow,home,honest,honey,honor,hook,hope,horizon,horn,horror,horse,host,hotel,hour,house,hover,human,humble,humid,humor,hung,hunger,hunt,hunter,hurdle,hurry,hurt,husband,hybrid,iceberg,icon,idea,ideal,igloo,ignore,image,impact,import,impose,improve,inch,include,income,index,indoor,infant,inform,initial,inject,injury,inland,inning,input,insect,insert,inside,insist,inspire,install,instant,intact,intend,into,invent,invest,invite,inward,iron,island,issue,item,ivory,jacket,jaguar,jam,jargon,jasmine,jeans,jelly,jewel,jigsaw,jockey,join,joint,jolly,journal,journey,joy,judge,juice,jumble,jump,jungle,junior,jury,just,justice,kangaroo,kayak,keen,keep,keeper,kettle,key,khaki,kick,kidney,kind,kindle,king,kingdom,kitchen,kitten,knee,kneel,knew,knife,knight,knit,knock,knot,know,known,label,labor,lace,lack,ladder,ladle,lady,laid,lake,lamb,lamp,land,lane,lantern,laptop,large,laser,last,late,later,latest,laugh,launch,laundry,lava,law,lawn,layer,lazy,lead,leader,leaf,league,lean,learn,lease,least,leave,lecture,ledge,left,legacy,legal,legend,lemon,lend,length,lens,lentil,less,lesson,letter,level,lever,liar,liberty,library,license,lift,light,like,lilac,lily,limit,line,linen,link,lion,liquid,list,listen,little,live,lively,living,lizard,load,loaf,loan,lobby,local,locate,lock,locust,lodge,loft,logic,logo,lonely,long,look,loop,loose,lord,lose,loss,lost,lotus,loud,lounge,love,lovely,lover,loyal,lucky,lumber,lunar,lunch,luxury,lyric,machine,madam,magic,magnet,mail,main,major,make,maker,makeup,male,mall,mammal,manage,mango,manner,manor,mantle,manual,many,maple,marble,march,margin,marina,mark,market,maroon,marry,marsh,mask,mass,master,match,mate,math,matrix,matter,mature,maybe,meadow,meal,mean,meant,measure,meat,medal,media,medic,medium,meet,melody,melon,member,memory,mental,mentor,menu,mercy,mere,merit,merry,mesh,mess,metal,method,metric,middle,midnight,might,mild,mile,milk,mill,mind,mine,miner,minor,mint,minute,mirror,miss,mission,mist,mitten,mix,mixed,mobile,model,modern,modest,moment,money,monitor,monkey,month,mood,moon,moral,more,morning,mosaic,mosque,most,mother,motion,motor,mount,mountain,mouse,mouth,move,movie,much,muffin,mumble,mural,muscle,museum,music,must,mustard,mystic,myth,nail,name,napkin,narrow,nasty,nation,native,nature,navy,near,nearby,nearly,neat,neck,need,needle,neighbor,neither,neon,nephew,nerve,nest,net,never,new,news,next,nibble,nice,nickel,niece,night,nine,noble,nobody,noise,noodle,normal,north,nose,notch,note,notice,novel,number,nurse,nutmeg,nylon,oak,oasis,object,oblige,oboe,observe,obtain,ocean,october,offer,office,often,olive,olympic,omega,onion,online,only,open,opera,opinion,option,orange,orbit,orchid,order,organ,origin,other,otter,ounce,outer,outfit,outlaw,outlet,outline,output,oval,oven,over,owner,oxygen,oyster,pace,pacific,pack,package,paddle,page,paid,pain,paint,pair,palace,palm,panel,panic,panther,paper,parade,parcel,parent,park,parlor,parrot,part,party,pass,passage,past,pasta,paste,pasture,patch,path,patio,patrol,pattern,pause,pave,payment,peace,peach,peak,peanut,pearl,pebble,pedal,pelican,pen,pencil,penguin,people,pepper,perfect,perform,period,permit,person,petal,phase,phone,photo,phrase,piano,pick,pickle,picnic,picture,piece,pigeon,pile,pilot,pin,pine,pink,pioneer,pipe,pirate,pistol,pitch,pixel,pizza,place,plain,plan,plane,planet,plank,plant,plaque,plastic,plate,plaza,plead,please,plenty,pliers,plot,plow,plug,plum,plumb,plume,plump,plunge,plus,pocket,poem,poet,point,polar,pole,police,policy,polish,polite,poll,pollen,pond,pony,pool,poor,popcorn,porch,port,portal,portion,pose,position,possible,post,poster,potato,pottery,pouch,pound,pour,powder,power,practice,praise,prance,prawn,pray,prefer,premises,prepare,present,press,pretty,pretzel,price,pride,priest,primary,prince,print,prior,prism,prison,private,prize,problem,process,produce,profit,program,project,promise,prompt,proof,proper,protect,proud,prove,provide,prune,public,pudding,puffin,pull,pulse,pumpkin,punch,pupil,puppy,pure,purple,purpose,purse,push,puzzle,pyramid,quaint,quake,quality,quantum,quarry,quartz,queen,query,quest,quick,quiet,quilt,quiver,quote,rabbit,race,radar,radio,radish,radius,raft,rage,rail,rain,rainbow,raise,rally,ranch,random,range,rank,rapid,rare,rate,rather,ratio,raven,reach,react,read,ready,real,realm,reason,rebel,recall,recent,recipe,record,recover,reduce,reed,reef,refer,refine,reflect,reform,refuge,refund,refuse,regard,region,regret,regular,reign,relax,relay,release,relief,remain,remark,remedy,remind,remote,remove,render,renew,rent,repair,repeat,replace,reply,report,rescue,resist,resort,rest,result,retail,retire,return,reveal,review,reward,rhino,rhyme,rhythm,ribbon,rice,rich,riddle,ride,ridge,rifle,right,rigid,ring,riot,ripe,rise,risk,ritual,rival,river,road,roast,robin,robot,rock,rocket,rocky,rodent,role,roll,roller,roof,room,roost,root,rope,rose,roster,rotate,rough,round,route,royal,rubber,rugged,ruin,rule,ruler,rumor,runner,rural,rush,rustic,saddle,safe,safety,sage,said,sail,sailor,sake,salad,salary,sale,salmon,salon,salt,salute,same,sample,sand,sandal,satisfy,sauce,sauna,save,scale,scan,scare,scarf,scene,scent,scheme,school,science,scoop,scope,score,scout,scrap,screen,script,scrub,sea,search,season,seat,second,secret,section,secure,seed,seek,seem,seen,select,self,sell,seller,senate,send,senior,sense,sent,sentry,sequel,series,serve,service,settle,seven,severe,shade,shadow,shaft,shake,shall,shallow,shape,share,shark,sharp,shed,sheep,sheet,shelf,shell,shelter,shield,shift,shine,ship,shirt,shock,shoe,shoot,shop,shore,short,shot,should,shout,shove,show,shower,shrimp,shrug,shy,side,siege,sight,sign,signal,silent,silk,silly,silver,simple,since,sing,singer,single,sink,siren,sister,site,six,sixth,size,skate,sketch,skill,skin,skip,skirt,skull,sky,slab,slate,sleep,sleet,sleeve,slice,slide,slight,slim,sling,slip,slope,slow,slush,small,smart,smell,smile,smoke,smooth,snack,snail,snake,snap,snare,sniff,snow,soap,sober,soccer,social,sock,socket,soda,soft,soil,solar,sold,soldier,sole,solid,solo,solve,some,son,sonar,song,soon,soothe,sorry,sort,soul,sound,soup,source,south,space,spade,span,spare,spark,speak,spear,special,speech,speed,spell,spend,sphere,spice,spider,spill,spin,spine,spirit,splash,split,spoke,spoon,sport,spot,spray,spread,spring,sprout,spruce,square,squash,squeeze,stable,stack,staff,stage,stain,stair,stake,stale,stall,stamp,stand,star,starch,stare,start,state,static,station,statue,stay,steady,steak,steam,steel,steep,steer,stem,step,stereo,stick,stiff,still,sting,stock,stone,stool,stop,store,storm,story,stove,strand,strap,straw,stray,stream,street,stress,stretch,strict,stride,strike,string,strip,strive,stroke,strong,studio,study,stuff,stumble,style,subject,subtle,suburb,subway,sudden,sugar,suit,suite,sulfur,sultan,summer,summit,sun,sunny,sunset,super,supply,sure,surge,survey,sushi,swamp,swan,swear,sweat,sweep,sweet,swift,swim,swing,switch,sword,symbol,system,table,tablet,tackle,tactile,tail,tailor,take,tale,talent,talk,tall,tally,tame,tandem,tango,tank,tannin,tape,target,task,taste,taught,tavern,teach,team,teapot,tear,tease,tech,teeth,tell,temper,temple,tempo,tenant,tend,tender,tennis,tenor,tense,tent,term,terrace,terrain,test,text,thank,that,theater,theme,then,theory,there,these,thick,thief,thigh,thin,thing,think,third,thirst,thirty,this,thorn,those,though,thread,three,threw,thrive,throat,throne,throw,thumb,thunder,thyme,ticket,tide,tidy,tied,tiger,tile,tilt,timber,time,timely,timid,tint,tiny,tire,tissue,title,toast,today,toddler,token,told,toll,tomato,tone,tonic,took,tool,tooth,topic,torch,tornado,toss,total,touch,tough,tour,toward,towel,tower,town,trace,track,trade,traffic,trail,train,trait,tramp,trap,travel,tray,tread,treat,tree,trek,tremble,trend,trial,tribe,trick,trim,trip,triple,troop,trophy,tropic,trouble,truck,true,truly,trunk,trust,truth,try,tube,tulip,tumble,tuna,tune,tunnel,turn,turtle,tutor,twig,twin,twist,type,typical,ugly,umbrella,uncle,under,unfold,union,unique,unit,unite,unity,universe,unlock,until,update,uphill,uphold,upon,upper,upset,upward,urban,urge,urgent,usable,usage,used,useful,user,usual,utensil,vacant,vacuum,vague,valiant,valid,valley,value,valve,van,vanish,vapor,varied,variety,various,vase,vast,vault,vector,velvet,vendor,venture,venue,verb,verify,verse,versus,very,vessel,vest,veteran,viable,vibrant,victory,video,view,vigil,village,vine,vintage,vinyl,viola,violet,violin,virtual,virtue,vision,visit,visual,vital,vivid,vocal,voice,volcano,volume,vote,voyage,waffle,wage,wagon,waist,wait,wake,walk,wall,walnut,wander,want,ward,warm,warn,warning,warrant,warrior,wash,waste,watch,water,wave,wavy,wax,way,weak,wealth,weapon,wear,weasel,weather,weave,web,wedge,week,weigh,weight,welcome,well,went,were,west,whale,wheat,wheel,when,where,which,while,whim,whip,whirl,whisk,whisper,whistle,white,whole,wide,widow,width,wife,wild,will,willow,wilt,win,wind,window,wine,wing,wink,winner,winter,wire,wisdom,wise,wish,wistful,witch,with,witty,wizard,wolf,woman,wonder,wood,wooden,wool,word,work,worker,world,worm,worry,worth,would,wound,woven,wrap,wreath,wreck,wren,wrist,write,writer,wrong,yacht,yard,year,yeast,yell,yellow,yield,yoga,yolk,young,youth,zebra,zenith,zephyr,zero,zinc,zipper,zone,zoo".split(",");
+  let genMode = "password";
+  function randomIndex(size) {
+    let space = 256;
+    let bytes = 1;
+    while (space <= size) {
+      space *= 256;
+      bytes += 1;
+    }
+    const limit = size * Math.floor(space / size);
+    const buf = new Uint8Array(bytes);
+    let value;
+    do {
+      crypto.getRandomValues(buf);
+      value = 0;
+      for (let i = 0; i < bytes; i++) value = value * 256 + buf[i];
+    } while (value >= limit);
+    return value % size;
+  }
+  function shuffle(items) {
+    for (let i = items.length - 1; i > 0; i--) {
+      const j = randomIndex(i + 1);
+      const tmp = items[i];
+      items[i] = items[j];
+      items[j] = tmp;
+    }
+    return items;
+  }
+  function generatePassword() {
+    const sets = [];
+    if (document.getElementById("gen-upper").checked) sets.push("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    if (document.getElementById("gen-lower").checked) sets.push("abcdefghijklmnopqrstuvwxyz");
+    if (document.getElementById("gen-digit").checked) sets.push("0123456789");
+    if (document.getElementById("gen-symbol").checked) sets.push("!@#$%^&*-_=+?");
+    const length = Number(document.getElementById("gen-length").value);
+    if (sets.length === 0) {
+      err.textContent = "Choose at least one of uppercase, lowercase, numbers, or symbols.";
+      return "";
+    }
+    if (!Number.isInteger(length) || length < sets.length || length > 128) {
+      err.textContent = "Password length must be from " + sets.length + " to 128.";
+      return "";
+    }
+    const all = sets.join("");
+    const chars = sets.map(function (set) { return set[randomIndex(set.length)]; });
+    while (chars.length < length) chars.push(all[randomIndex(all.length)]);
+    return shuffle(chars).join("");
+  }
+  function generatePassphrase() {
+    const count = Number(document.getElementById("gen-length").value);
+    if (!Number.isInteger(count) || count < 3 || count > 12) {
+      err.textContent = "Passphrase length must be from 3 to 12 words.";
+      return "";
+    }
+    const picked = [];
+    while (picked.length < count) picked.push(words[randomIndex(words.length)]);
+    return picked.join("-");
+  }
+  function setGenerator(next) {
+    genMode = next;
+    const password = next === "password";
+    document.getElementById("gen-password").classList.toggle("selected", password);
+    document.getElementById("gen-passphrase").classList.toggle("selected", !password);
+    document.getElementById("gen-password").setAttribute("aria-pressed", password ? "true" : "false");
+    document.getElementById("gen-passphrase").setAttribute("aria-pressed", password ? "false" : "true");
+    document.getElementById("gen-sets").hidden = !password;
+    document.getElementById("gen-length-label").firstChild.textContent = password ? "Characters " : "Words ";
+    const length = document.getElementById("gen-length");
+    length.min = password ? "8" : "3";
+    length.max = password ? "128" : "12";
+    length.value = password ? "20" : "6";
+  }
+  plain.addEventListener("input", function () { updateCount(); });
+  views.addEventListener("input", updateSummary);
+  amount.addEventListener("input", updateSummary);
+  unit.addEventListener("change", updateSummary);
+  document.querySelectorAll("[data-ttl]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      mode = btn.getAttribute("data-ttl");
+      document.querySelectorAll("[data-ttl]").forEach(function (other) {
+        const on = other === btn;
+        other.classList.toggle("selected", on);
+        other.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+      custom.hidden = mode !== "custom";
+      updateSummary();
+    });
+  });
+  toggle.addEventListener("click", function () {
+    const masked = plain.classList.toggle("masked");
+    toggle.textContent = masked ? "Show" : "Hide";
+    toggle.setAttribute("aria-pressed", masked ? "true" : "false");
+  });
+  document.getElementById("gen-password").addEventListener("click", function () { setGenerator("password"); });
+  document.getElementById("gen-passphrase").addEventListener("click", function () { setGenerator("passphrase"); });
+  document.getElementById("generate").addEventListener("click", function () {
+    const value = genMode === "passphrase" ? generatePassphrase() : generatePassword();
+    if (!value) return;
+    err.textContent = "";
+    plain.value = value;
+    plain.classList.remove("masked");
+    toggle.textContent = "Hide";
+    toggle.setAttribute("aria-pressed", "false");
+    updateCount();
+  });
+  document.getElementById("again").addEventListener("click", function () {
+    plain.value = "";
+    link = "";
+    linkEl.textContent = "";
+    result.hidden = true;
+    resultMsg.textContent = "";
+    copyBtn.textContent = "Copy link";
+    err.textContent = "";
+    updateCount();
+    updateSummary();
+    plain.focus();
+  });
+  createBtn.addEventListener("click", async function () {
+    const text = plain.value;
+    const viewCount = Number(views.value);
+    const ttl = ttlSeconds();
+    const maxAmount = unit.value === "days" ? 7 : unit.value === "hours" ? 168 : 10080;
+    if (text.length === 0) {
+      err.textContent = "Enter a password or some text first.";
+      return;
+    }
+    if (plainBytes() + 16 > maxCipher) {
+      err.textContent = "The text is too long to encrypt.";
+      return;
+    }
+    if (mode === "custom" && (!Number.isInteger(Number(amount.value)) || Number(amount.value) < 1 || Number(amount.value) > maxAmount)) {
+      err.textContent = "Lifetime must be from 1 minute to 7 days.";
+      return;
+    }
+    if (!Number.isInteger(viewCount) || viewCount < 1 || viewCount > 20) {
+      err.textContent = "Opens must be from 1 to 20.";
+      return;
+    }
+    createBtn.disabled = true;
+    createBtn.textContent = "Creating link…";
+    err.textContent = "";
+    try {
+      const idRes = await post("/api/id", {});
+      if (idRes.status !== 200 || !idRes.body || !idRes.body.id) {
+        err.textContent = "A link cannot be created right now.";
+        return;
+      }
+      const id = idRes.body.id;
+      const master = crypto.getRandomValues(new Uint8Array(32));
+      const encKey = await hkdf(master, "pwpush-v1-enc");
+      const authToken = await hkdf(master, "pwpush-v1-auth");
+      const nonce = crypto.getRandomValues(new Uint8Array(12));
+      const aes = await crypto.subtle.importKey("raw", encKey, "AES-GCM", false, ["encrypt"]);
+      const cipher = new Uint8Array(await crypto.subtle.encrypt({
+        name: "AES-GCM",
+        iv: nonce,
+        additionalData: new TextEncoder().encode("v1|" + id)
+      }, aes, new TextEncoder().encode(text)));
+      const created = await post("/api/create", {
+        id: id,
+        nonce: bytesToB64url(nonce),
+        ciphertext: bytesToB64url(cipher),
+        version: 1,
+        ttl: ttl,
+        views: viewCount,
+        authToken: bytesToB64url(authToken)
+      });
+      if (created.status !== 200) {
+        err.textContent = "The link was not created.";
+        return;
+      }
+      link = origin + "/p/" + id + "#" + bytesToB64url(master);
+      linkEl.textContent = link;
+      result.hidden = false;
+      resultMsg.textContent = "The link is ready. Send it to the recipient.";
+      copyBtn.textContent = "Copy link";
+    } finally {
+      createBtn.disabled = false;
+      createBtn.textContent = "Create link";
+    }
+  });
+  copyBtn.addEventListener("click", async function () {
+    try {
+      await navigator.clipboard.writeText(link);
+      copyBtn.textContent = "Copied";
+      resultMsg.textContent = "Link copied.";
+      clearTimeout(copyTimer);
+      copyTimer = setTimeout(function () { copyBtn.textContent = "Copy link"; }, 2000);
+    } catch (e) {
+      resultMsg.textContent = "Copy the link from the box.";
+    }
+  });
+  updateCount();
+})();
+</script>
+</body>
+</html>
